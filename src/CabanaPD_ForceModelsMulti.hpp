@@ -74,6 +74,88 @@ struct IdentityFunctor
     }
 };
 
+template <typename IfType, typename ElseType, bool Condition>
+struct IfElseType
+{
+    static_assert( true, "We shouuld never end up here" );
+};
+
+template <typename IfType, typename ElseType>
+struct IfElseType<IfType, ElseType, true>
+{
+    using type = IfType;
+};
+
+template <typename IfType, typename ElseType>
+struct IfElseType<IfType, ElseType, false>
+{
+    using type = ElseType;
+};
+
+template <typename ParameterPackType, typename Sequence>
+struct CheckTemperatureDependence
+{
+};
+
+template <typename ParameterPackType, std::size_t... Indices>
+struct CheckTemperatureDependence<ParameterPackType,
+                                  std::index_sequence<Indices...>>
+{
+    using type = typename IfElseType<
+        TemperatureDependent, TemperatureIndependent,
+        std::disjunction_v<std::is_same<
+            typename ParameterPackType::value_type<Indices>::thermal_type,
+            TemperatureDependent>...>>::type;
+};
+
+template <typename ParameterPackType, typename Sequence>
+struct CheckFractureModel
+{
+};
+
+template <typename ParameterPackType, std::size_t... Indices>
+struct CheckFractureModel<ParameterPackType, std::index_sequence<Indices...>>
+{
+    using type = typename IfElseType<
+        Fracture, NoFracture,
+        std::disjunction_v<std::is_same<
+            typename ParameterPackType::value_type<Indices>::fracture_type,
+            Fracture>...>>::type;
+};
+
+template <typename FractureType, typename ParameterPackType, unsigned Index,
+          bool Condition>
+struct FirstModelWithFractureTypeImpl
+{
+};
+
+template <typename FractureType, typename ParameterPackType, unsigned Index>
+struct FirstModelWithFractureTypeImpl<FractureType, ParameterPackType, Index,
+                                      true>
+{
+    using type = typename ParameterPackType::value_type<Index>;
+};
+
+template <typename FractureType, typename ParameterPackType, unsigned Index>
+struct FirstModelWithFractureTypeImpl<FractureType, ParameterPackType, Index,
+                                      false>
+{
+    using type = typename FirstModelWithFractureTypeImpl<
+        FractureType, ParameterPackType, Index + 1,
+        std::is_same_v<
+            typename ParameterPackType::value_type<Index>::fracture_type,
+            FractureType>>::type;
+};
+
+template <typename FractureType, typename ParameterPackType>
+struct FirstModelWithFractureType
+{
+    using type = typename FirstModelWithFractureTypeImpl<
+        FractureType, ParameterPackType, 0,
+        std::is_same_v<typename ParameterPackType::value_type<0>::fracture_type,
+                       FractureType>>::type;
+};
+
 // Wrap multiple models in a single object.
 template <typename MaterialType, typename ParameterPackType, typename Sequence>
 struct ForceModelsImpl
@@ -87,19 +169,22 @@ struct ForceModelsImpl<MaterialType, ParameterPackType,
 {
     using material_type = MultiMaterial;
 
-    // TODO how to decide this?
-    using first_model = typename ParameterPackType::value_type<0>;
-    using model_type = typename first_model::model_type;
-    using base_model = typename first_model::base_model;
-    using thermal_type = typename first_model::thermal_type;
-    using fracture_type = typename first_model::fracture_type;
-
     static_assert(
-        ( std::is_same_v<
-              typename ParameterPackType::value_type<Indices>::thermal_type,
-              TemperatureIndependent> ||
-          ... ),
-        "Thermomechanics does not yet support multiple materials!" );
+        (std::conjunction_v<std::is_same<
+             typename ParameterPackType::value_type<Indices>::base_model,
+             typename ParameterPackType::value_type<0>::base_model>...>),
+        "All models need the same base model" );
+    using base_model = typename ParameterPackType::value_type<0>::base_model;
+
+    using fracture_type = typename CheckFractureModel<
+        ParameterPackType,
+        std::make_index_sequence<ParameterPackType::size - 1>>::type;
+    using thermal_type = typename CheckTemperatureDependence<
+        ParameterPackType,
+        std::make_index_sequence<ParameterPackType::size - 1>>::type;
+    using model_type =
+        typename FirstModelWithFractureType<fracture_type,
+                                            ParameterPackType>::type;
 
     ForceModelsImpl( MaterialType t, ParameterPackType const& m )
         : type( t )
