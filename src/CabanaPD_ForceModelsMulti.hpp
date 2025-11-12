@@ -338,6 +338,9 @@ auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
                             ModelType2 m2 )
 {
     ModelType1 m12( m1, m2 );
+    // the indexing has to match the order that we pass the models to the
+    // multiforce model, as the return index of indexing is used to select the
+    // model from the model list.
     DiagonalIndexing<2> indexing;
     return createMultiForceModel( particles, indexing, m1, m2, m12 );
 }
@@ -351,6 +354,9 @@ auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
     ModelType1 m23( m2, m3 );
     ModelType1 m13( m1, m3 );
 
+    // the indexing has to match the order that we pass the models to the
+    // multiforce model, as the return index of indexing is used to select the
+    // model from the model list.
     DiagonalIndexing<3> indexing;
     return createMultiForceModel( particles, indexing, m1, m2, m12, m23, m13 );
 }
@@ -369,8 +375,12 @@ auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
 
     ModelType1 m14( m1, m4 );
 
+    // the indexing has to match the order that we pass the models to the
+    // multiforce model, as the return index of indexing is used to select the
+    // model from the model list.
     DiagonalIndexing<4> indexing;
-    return createMultiForceModel( particles, indexing, m1, m2,m3,m4, m12, m23, m34, m13,m24,m14 );
+    return createMultiForceModel( particles, indexing, m1, m2, m3, m4, m12, m23,
+                                  m34, m13, m24, m14 );
 }
 
 // TODO autogenerate indexing for arbitrary case
