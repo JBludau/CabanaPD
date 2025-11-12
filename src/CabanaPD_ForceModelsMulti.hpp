@@ -12,6 +12,7 @@
 #ifndef FORCE_MODELS_MULTI_H
 #define FORCE_MODELS_MULTI_H
 
+#include <CabanaPD_Indexing.hpp>
 #include <CabanaPD_Output.hpp>
 
 namespace CabanaPD
@@ -157,15 +158,16 @@ struct FirstModelWithFractureType
 };
 
 // Wrap multiple models in a single object.
-template <typename MaterialType, typename ParameterPackType, typename Sequence>
+template <typename MaterialType, typename Indexing, typename ParameterPackType,
+          typename OutsideRangeFunctorType, typename Sequence>
 struct ForceModelsImpl
 {
 };
 
-template <typename MaterialType, typename ParameterPackType,
-          std::size_t... Indices>
-struct ForceModelsImpl<MaterialType, ParameterPackType,
-                       std::index_sequence<Indices...>>
+template <typename MaterialType, typename Indexing, typename ParameterPackType,
+          typename OutsideRangeFunctorType, std::size_t... Indices>
+struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
+                       OutsideRangeFunctorType, std::index_sequence<Indices...>>
 {
     using material_type = MultiMaterial;
 
@@ -186,9 +188,13 @@ struct ForceModelsImpl<MaterialType, ParameterPackType,
         typename FirstModelWithFractureType<fracture_type,
                                             ParameterPackType>::type;
 
-    ForceModelsImpl( MaterialType t, ParameterPackType const& m )
+    ForceModelsImpl( MaterialType t, Indexing const& i,
+                     ParameterPackType const& m,
+                     OutsideRangeFunctorType const& o )
         : type( t )
+        , indexing( i )
         , models( m )
+        , outsideRangeFunctor( o )
     {
         setHorizon();
     }
@@ -204,14 +210,7 @@ struct ForceModelsImpl<MaterialType, ParameterPackType,
 
     KOKKOS_INLINE_FUNCTION int getIndex( const int i, const int j ) const
     {
-        // TODO
-        const int type_i = type( i );
-        const int type_j = type( j );
-        // FIXME: only for binary.
-        if ( type_i == type_j )
-            return type_i;
-        else
-            return 2;
+        return indexing( i, j );
     }
 
     // Extract model index and hide template indexing.
@@ -219,10 +218,19 @@ struct ForceModelsImpl<MaterialType, ParameterPackType,
     KOKKOS_INLINE_FUNCTION auto operator()( Tag tag, const int i, const int j,
                                             Args... args ) const
     {
+        using commonReturnType = typename std::invoke_result_t<
+            typename ParameterPackType::value_type<0>, Tag, const int,
+            const int, Args...>;
+
         auto t = getIndex( i, j );
         // Call individual model.
-        return run_functor_for_index_in_pack_with_args(
-            IdentityFunctor{}, t, models, tag, i, j, args... );
+        // if inside the pack
+        if ( t < ParameterPackType::size - 1 )
+            return run_functor_for_index_in_pack_with_args(
+                IdentityFunctor{}, t, models, tag, i, j, args... );
+        else
+            return outsideRangeFunctor.template operator()<commonReturnType>(
+                tag, i, j, args... );
     }
 
     // This is only for LPS force/energy, currently the only cases that require
@@ -234,14 +242,23 @@ struct ForceModelsImpl<MaterialType, ParameterPackType,
                                             const int i, const int j,
                                             Args... args ) const
     {
+        MultiMaterial mtag;
+        using commonReturnType = typename std::invoke_result_t<
+            typename ParameterPackType::value_type<0>, Tag, MultiMaterial,
+            const int, const int, Args...>;
+
         const int type_i = type( i );
         const int type_j = type( j );
 
         auto t = getIndex( i, j );
-        MultiMaterial mtag;
         // Call individual model.
-        return run_functor_for_index_in_pack_with_args(
-            IdentityFunctor{}, t, models, tag, mtag, type_i, type_j, args... );
+        if ( t < ParameterPackType::size - 1 )
+            return run_functor_for_index_in_pack_with_args(
+                IdentityFunctor{}, t, models, tag, mtag, type_i, type_j,
+                args... );
+        else
+            return outsideRangeFunctor.template operator()<commonReturnType>(
+                tag, i, j, args... );
     }
 
     auto horizon( const int ) { return delta; }
@@ -251,7 +268,9 @@ struct ForceModelsImpl<MaterialType, ParameterPackType,
 
     double delta;
     MaterialType type;
+    Indexing indexing;
     ParameterPackType models;
+    OutsideRangeFunctorType outsideRangeFunctor;
 
   protected:
     void setHorizon()
@@ -274,27 +293,44 @@ struct ForceModelsImpl<MaterialType, ParameterPackType,
 /******************************************************************************
   Multi-material models
 ******************************************************************************/
-struct AverageTag
+struct AbortIfOutsideRangeFunctor
 {
+    template <typename ReturnType, typename... Args>
+    KOKKOS_FUNCTION ReturnType operator()( Args... ) const
+    {
+        Kokkos::abort( "Functor outside of range requested" );
+        return ReturnType{};
+    }
 };
-template <typename MaterialType, typename ParameterPackType>
-struct ForceModels : CabanaPD::Impl::ForceModelsImpl<
-                         MaterialType, ParameterPackType,
-                         std::make_index_sequence<ParameterPackType::size - 1>>
+
+template <typename MaterialType, typename Indexing, typename ParameterPackType,
+          typename OutsideRangeFunctorType = AbortIfOutsideRangeFunctor>
+struct ForceModels
+    : CabanaPD::Impl::ForceModelsImpl<
+          MaterialType, Indexing, ParameterPackType, OutsideRangeFunctorType,
+          std::make_index_sequence<ParameterPackType::size - 1>>
 {
-    ForceModels( MaterialType t, ParameterPackType const& m )
+    ForceModels( MaterialType t, Indexing i, ParameterPackType const& m,
+                 OutsideRangeFunctorType const& o = OutsideRangeFunctorType() )
         : CabanaPD::Impl::ForceModelsImpl<
-              MaterialType, ParameterPackType,
-              std::make_index_sequence<ParameterPackType::size - 1>>( t, m )
+              MaterialType, Indexing, ParameterPackType,
+              OutsideRangeFunctorType,
+              std::make_index_sequence<ParameterPackType::size - 1>>( t, i, m,
+                                                                      o )
     {
     }
 };
 
-template <typename ParticleType, typename... ModelTypes>
-auto createMultiForceModel( ParticleType particles, ModelTypes... m )
+struct AverageTag
+{
+};
+
+template <typename ParticleType, typename Indexing, typename... ModelTypes>
+auto createMultiForceModel( ParticleType particles, Indexing indexing,
+                            ModelTypes... m )
 {
     auto type = particles.sliceType();
-    return ForceModels( type, Cabana::makeParameterPack( m... ) );
+    return ForceModels( type, indexing, Cabana::makeParameterPack( m... ) );
 }
 
 template <typename ParticleType, typename ModelType1, typename ModelType2>
@@ -302,8 +338,49 @@ auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
                             ModelType2 m2 )
 {
     ModelType1 m12( m1, m2 );
-    return createMultiForceModel( particles, m1, m2, m12 );
+    DiagonalIndexing<2> indexing;
+    return createMultiForceModel( particles, indexing, m1, m2, m12 );
 }
+
+template <typename ParticleType, typename ModelType1, typename ModelType2,
+          typename ModelType3>
+auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
+                            ModelType2 m2, ModelType3 m3 )
+{
+    ModelType1 m12( m1, m2 );
+    ModelType1 m23( m2, m3 );
+    ModelType1 m13( m1, m3 );
+
+    DiagonalIndexing<3> indexing;
+    return createMultiForceModel( particles, indexing, m1, m2, m12, m23, m13 );
+}
+
+template <typename ParticleType, typename ModelType1, typename ModelType2,
+          typename ModelType3, typename ModelType4>
+auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
+                            ModelType2 m2, ModelType3 m3, ModelType4 m4 )
+{
+    ModelType1 m12( m1, m2 );
+    ModelType1 m23( m2, m3 );
+    ModelType1 m34( m3, m4 );
+
+    ModelType1 m13( m1, m3 );
+    ModelType1 m24( m2, m4 );
+
+    ModelType1 m14( m1, m4 );
+
+    DiagonalIndexing<4> indexing;
+    return createMultiForceModel( particles, indexing, m1, m2,m3,m4, m12, m23, m34, m13,m24,m14 );
+}
+
+// TODO autogenerate indexing for arbitrary case
+// template <typename ParticleType, typename... ModelTypes>
+// auto createMultiForceModel( ParticleType particles, ModelTypes... m )
+//{
+//    auto indexing = 0;//TODO
+//    return createMultiForceModel( particles, indexing,
+//    Cabana::makeParameterPack( m... ) );
+//}
 
 } // namespace CabanaPD
 
