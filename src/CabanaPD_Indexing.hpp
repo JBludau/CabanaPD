@@ -17,21 +17,24 @@ namespace CabanaPD
 template <unsigned NumBaseModels>
 struct DiagonalIndexing
 {
-    KOKKOS_FUNCTION unsigned operator()( unsigned firstType, unsigned secondType ) const
+    KOKKOS_FUNCTION unsigned operator()( unsigned firstType,
+                                         unsigned secondType ) const
     {
-        if(firstType >= NumBaseModels || secondType >= NumBaseModels)
-            Kokkos::abort("Index out of range of DiagonalIndexing");
+        if ( firstType >= NumBaseModels || secondType >= NumBaseModels )
+            Kokkos::abort( "Index out of range of DiagonalIndexing" );
 
-        unsigned diagonalOrder = Kokkos::abs(static_cast<int>(secondType)-static_cast<int>(firstType));
+        unsigned diagonalOrder = Kokkos::abs( static_cast<int>( secondType ) -
+                                              static_cast<int>( firstType ) );
         unsigned offset = 0;
-        for(unsigned order=0; order<diagonalOrder; ++order)
+        for ( unsigned order = 0; order < diagonalOrder; ++order )
         {
-            offset += NumBaseModels-order;
+            offset += NumBaseModels - order;
         }
 
-        unsigned indexAlongDiagonal = firstType < secondType ? firstType : secondType;
+        unsigned indexAlongDiagonal =
+            firstType < secondType ? firstType : secondType;
 
-        return offset+indexAlongDiagonal;
+        return offset + indexAlongDiagonal;
     }
 };
 } // namespace CabanaPD
