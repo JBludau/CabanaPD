@@ -398,11 +398,13 @@ auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
 
 // TODO autogenerate indexing for arbitrary case
 // template <typename ParticleType, typename... ModelTypes>
-// auto createMultiForceModel( ParticleType particles, ModelTypes... m )
+// auto createMultiForceModel( ParticleType particles, AverageTag, ModelTypes...
+// m )
 //{
-//    auto indexing = 0;//TODO
+//    DiagonalIndexing<sizeof(ModelTypes...)> indexing;
+//    auto models = //TODO
 //    return createMultiForceModel( particles, indexing,
-//    Cabana::makeParameterPack( m... ) );
+//    Cabana::makeParameterPack( models ) );
 //}
 
 } // namespace CabanaPD
