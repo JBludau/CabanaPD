@@ -385,11 +385,11 @@ auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
                             ModelType2 m2, ModelType3 m3, ModelType4 m4 )
 {
     ModelType1 m12( m1, m2 );
-    ModelType1 m23( m2, m3 );
-    ModelType1 m34( m3, m4 );
+    ModelType2 m23( m2, m3 );
+    ModelType3 m34( m3, m4 );
 
     ModelType1 m13( m1, m3 );
-    ModelType1 m24( m2, m4 );
+    ModelType2 m24( m2, m4 );
 
     ModelType1 m14( m1, m4 );
 
