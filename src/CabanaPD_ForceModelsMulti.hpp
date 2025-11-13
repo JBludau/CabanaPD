@@ -351,7 +351,7 @@ auto createMultiForceModel( ParticleType particles, AverageTag, ModelType1 m1,
                             ModelType2 m2, ModelType3 m3 )
 {
     ModelType1 m12( m1, m2 );
-    ModelType1 m23( m2, m3 );
+    ModelType2 m23( m2, m3 );
     ModelType1 m13( m1, m3 );
 
     // the indexing has to match the order that we pass the models to the
