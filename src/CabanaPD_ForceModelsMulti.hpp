@@ -105,11 +105,12 @@ template <typename ParameterPackType, std::size_t... Indices>
 struct CheckTemperatureDependence<ParameterPackType,
                                   std::index_sequence<Indices...>>
 {
-    using type = typename IfElseType<
-        TemperatureDependent, TemperatureIndependent,
-        std::disjunction_v<std::is_same<
-            typename ParameterPackType::value_type<Indices>::thermal_type,
-            TemperatureDependent>...>>::type;
+    using type =
+        typename IfElseType<TemperatureDependent, TemperatureIndependent,
+                            std::disjunction_v<std::is_same<
+                                typename ParameterPackType::template value_type<
+                                    Indices>::thermal_type,
+                                TemperatureDependent>...>>::type;
 };
 
 template <typename ParameterPackType, typename Sequence>
@@ -122,11 +123,12 @@ struct CheckFractureModel
 template <typename ParameterPackType, std::size_t... Indices>
 struct CheckFractureModel<ParameterPackType, std::index_sequence<Indices...>>
 {
-    using type = typename IfElseType<
-        Fracture, NoFracture,
-        std::disjunction_v<std::is_same<
-            typename ParameterPackType::value_type<Indices>::fracture_type,
-            Fracture>...>>::type;
+    using type =
+        typename IfElseType<Fracture, NoFracture,
+                            std::disjunction_v<std::is_same<
+                                typename ParameterPackType::template value_type<
+                                    Indices>::fracture_type,
+                                Fracture>...>>::type;
 };
 
 template <typename FractureType, typename ParameterPackType, unsigned Index,
@@ -145,7 +147,7 @@ template <typename FractureType, typename ParameterPackType, unsigned Index>
 struct FirstModelWithFractureTypeImpl<FractureType, ParameterPackType, Index,
                                       true>
 {
-    using type = typename ParameterPackType::value_type<Index>;
+    using type = typename ParameterPackType::template value_type<Index>;
 };
 
 template <typename FractureType, typename ParameterPackType, unsigned Index>
@@ -154,9 +156,9 @@ struct FirstModelWithFractureTypeImpl<FractureType, ParameterPackType, Index,
 {
     using type = typename FirstModelWithFractureTypeImpl<
         FractureType, ParameterPackType, Index + 1,
-        std::is_same_v<
-            typename ParameterPackType::value_type<Index>::fracture_type,
-            FractureType>>::type;
+        std::is_same_v<typename ParameterPackType::template value_type<
+                           Index>::fracture_type,
+                       FractureType>>::type;
 };
 
 template <typename FractureType, typename ParameterPackType>
@@ -164,8 +166,9 @@ struct FirstModelWithFractureType
 {
     using type = typename FirstModelWithFractureTypeImpl<
         FractureType, ParameterPackType, 0,
-        std::is_same_v<typename ParameterPackType::value_type<0>::fracture_type,
-                       FractureType>>::type;
+        std::is_same_v<
+            typename ParameterPackType::template value_type<0>::fracture_type,
+            FractureType>>::type;
 };
 
 // Wrap multiple models in a single object.
@@ -185,11 +188,14 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
     using material_type = MultiMaterial;
 
     static_assert(
-        (std::conjunction_v<std::is_same<
-             typename ParameterPackType::value_type<Indices>::base_model,
-             typename ParameterPackType::value_type<0>::base_model>...>),
+        (std::conjunction_v<
+            std::is_same<typename ParameterPackType::template value_type<
+                             Indices>::base_model,
+                         typename ParameterPackType::template value_type<
+                             0>::base_model>...>),
         "All models need the same base model" );
-    using base_model = typename ParameterPackType::value_type<0>::base_model;
+    using base_model =
+        typename ParameterPackType::template value_type<0>::base_model;
 
     using fracture_type = typename CheckFractureModel<
         ParameterPackType,
@@ -231,7 +237,7 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
                                             Args... args ) const
     {
         using commonReturnType = typename std::invoke_result_t<
-            typename ParameterPackType::value_type<0>, Tag, const int,
+            typename ParameterPackType::template value_type<0>, Tag, const int,
             const int, Args...>;
 
         auto t = getIndex( i, j );
@@ -256,8 +262,8 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
     {
         MultiMaterial mtag;
         using commonReturnType = typename std::invoke_result_t<
-            typename ParameterPackType::value_type<0>, Tag, MultiMaterial,
-            const int, const int, Args...>;
+            typename ParameterPackType::template value_type<0>, Tag,
+            MultiMaterial, const int, const int, Args...>;
 
         const int type_i = type( i );
         const int type_j = type( j );
