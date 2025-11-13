@@ -78,7 +78,8 @@ struct IdentityFunctor
 template <typename IfType, typename ElseType, bool Condition>
 struct IfElseType
 {
-    static_assert( true, "We shouuld never end up here" );
+    static_assert( !Condition, "IfElseType: We should never end up here" );
+    static_assert( Condition, "IfElseType: We should never end up here" );
 };
 
 template <typename IfType, typename ElseType>
@@ -96,6 +97,8 @@ struct IfElseType<IfType, ElseType, false>
 template <typename ParameterPackType, typename Sequence>
 struct CheckTemperatureDependence
 {
+    static_assert( !std::is_same_v<Sequence, Sequence>,
+                   "CheckTemperatureDependence: We should never end up here" );
 };
 
 template <typename ParameterPackType, std::size_t... Indices>
@@ -112,6 +115,8 @@ struct CheckTemperatureDependence<ParameterPackType,
 template <typename ParameterPackType, typename Sequence>
 struct CheckFractureModel
 {
+    static_assert( !std::is_same_v<Sequence, Sequence>,
+                   "CheckFractureModel: We should never end up here" );
 };
 
 template <typename ParameterPackType, std::size_t... Indices>
@@ -128,6 +133,12 @@ template <typename FractureType, typename ParameterPackType, unsigned Index,
           bool Condition>
 struct FirstModelWithFractureTypeImpl
 {
+    static_assert(
+        !Condition,
+        "FirstModelWithFractureTypeImpl: We should never end up here" );
+    static_assert(
+        Condition,
+        "FirstModelWithFractureTypeImpl: We should never end up here" );
 };
 
 template <typename FractureType, typename ParameterPackType, unsigned Index>
@@ -162,6 +173,8 @@ template <typename MaterialType, typename Indexing, typename ParameterPackType,
           typename OutsideRangeFunctorType, typename Sequence>
 struct ForceModelsImpl
 {
+    static_assert( !std::is_same_v<Sequence, Sequence>,
+                   "ForceModelsImpl: We should never end up here" );
 };
 
 template <typename MaterialType, typename Indexing, typename ParameterPackType,
