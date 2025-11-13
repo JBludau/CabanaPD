@@ -216,8 +216,8 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
 
     void updateBonds( const int num_local, const int max_neighbors )
     {
-        ( Cabana::get<Indices>( models ).updateBounds( num_local,
-                                                       max_neighbors ),
+        ( Cabana::get<Indices>( models ).updateBonds( num_local,
+                                                      max_neighbors ),
           ... );
     }
 
