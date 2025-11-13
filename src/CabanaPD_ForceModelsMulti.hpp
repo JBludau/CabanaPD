@@ -197,9 +197,8 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
     using thermal_type = typename CheckTemperatureDependence<
         ParameterPackType,
         std::make_index_sequence<ParameterPackType::size - 1>>::type;
-    using model_type =
-        typename FirstModelWithFractureType<fracture_type,
-                                            ParameterPackType>::type;
+    using model_type = typename FirstModelWithFractureType<
+        fracture_type, ParameterPackType>::type::base_model;
 
     ForceModelsImpl( MaterialType t, Indexing const& i,
                      ParameterPackType const& m,
