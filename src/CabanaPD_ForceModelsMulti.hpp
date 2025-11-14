@@ -228,7 +228,7 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
 
     KOKKOS_INLINE_FUNCTION int getIndex( const int i, const int j ) const
     {
-        return indexing( i, j );
+        return indexing( type( i ), type( j ) );
     }
 
     // Extract model index and hide template indexing.
