@@ -157,7 +157,7 @@ struct FirstModelWithFractureTypeImpl<FractureType, ParameterPackType, Index,
     using type = typename FirstModelWithFractureTypeImpl<
         FractureType, ParameterPackType, Index + 1,
         std::is_same_v<typename ParameterPackType::template value_type<
-                           Index>::fracture_type,
+                           Index + 1>::fracture_type,
                        FractureType>>::type;
 };
 
@@ -199,10 +199,10 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
 
     using fracture_type = typename CheckFractureModel<
         ParameterPackType,
-        std::make_index_sequence<ParameterPackType::size - 1>>::type;
+        std::make_index_sequence<ParameterPackType::size>>::type;
     using thermal_type = typename CheckTemperatureDependence<
         ParameterPackType,
-        std::make_index_sequence<ParameterPackType::size - 1>>::type;
+        std::make_index_sequence<ParameterPackType::size>>::type;
     using model_type = typename FirstModelWithFractureType<
         fracture_type, ParameterPackType>::type::base_model;
 
@@ -243,7 +243,7 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
         auto t = getIndex( i, j );
         // Call individual model.
         // if inside the pack
-        if ( t < ParameterPackType::size - 1 )
+        if ( t < ParameterPackType::size)
             return run_functor_for_index_in_pack_with_args(
                 IdentityFunctor{}, t, models, tag, i, j, args... );
         else
@@ -270,7 +270,7 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
 
         auto t = getIndex( i, j );
         // Call individual model.
-        if ( t < ParameterPackType::size - 1 )
+        if ( t < ParameterPackType::size )
             return run_functor_for_index_in_pack_with_args(
                 IdentityFunctor{}, t, models, tag, mtag, type_i, type_j,
                 args... );
@@ -326,15 +326,14 @@ template <typename MaterialType, typename Indexing, typename ParameterPackType,
 struct ForceModels
     : CabanaPD::Impl::ForceModelsImpl<
           MaterialType, Indexing, ParameterPackType, OutsideRangeFunctorType,
-          std::make_index_sequence<ParameterPackType::size - 1>>
+          std::make_index_sequence<ParameterPackType::size>>
 {
     ForceModels( MaterialType t, Indexing i, ParameterPackType const& m,
                  OutsideRangeFunctorType const& o = OutsideRangeFunctorType() )
         : CabanaPD::Impl::ForceModelsImpl<
               MaterialType, Indexing, ParameterPackType,
               OutsideRangeFunctorType,
-              std::make_index_sequence<ParameterPackType::size - 1>>( t, i, m,
-                                                                      o )
+              std::make_index_sequence<ParameterPackType::size>>( t, i, m, o )
     {
     }
 };
