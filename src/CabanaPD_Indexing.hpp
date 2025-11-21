@@ -17,6 +17,8 @@ namespace CabanaPD
 template <unsigned NumBaseModels>
 struct DiagonalIndexing
 {
+    static_assert(NumBaseModels > 0, "NumBaseModels must be larger than 0");
+
     KOKKOS_FUNCTION unsigned operator()( unsigned firstType,
                                          unsigned secondType ) const
     {
