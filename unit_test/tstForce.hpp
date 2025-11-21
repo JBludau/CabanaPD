@@ -1348,4 +1348,93 @@ TEST( TEST_CATEGORY, test_force_lps_quaternary )
     testForce( models, dx, m, QuadraticTag{}, inputs );
 }
 
+namespace
+{
+struct FirstTestTag
+{
+};
+struct BaseModelDummyOne
+{
+};
+struct BaseModelDummyTwo
+{
+};
+
+template <typename BaseModel>
+struct TestModelType
+{
+    using base_model = BaseModel;
+    KOKKOS_INLINE_FUNCTION auto operator()( int index ) const { return index; }
+};
+
+template <typename ModelType, typename BaseModel, typename FractureType,
+          typename ThermalType>
+struct TestModel
+{
+    using model_type = ModelType;
+    using base_model = BaseModel;
+    using fracture_type = FractureType;
+    using thermal_type = ThermalType;
+
+    int expectedTypeI;
+    int expectedTypeJ;
+    int expectedParameter;
+
+    double delta = 0.1;
+
+    KOKKOS_INLINE_FUNCTION bool operator()( FirstTestTag, const int typeI,
+                                            const int typeJ,
+                                            const int inputValue ) const
+    {
+        if ( inputValue != expectedParameter )
+            Kokkos::abort( "Wrong inputValue in operator with FirstTestTag" );
+        if ( typeI != expectedTypeI )
+            Kokkos::abort( "Wrong typeI in operator with FirstTestTag" );
+        if ( typeJ != expectedTypeJ )
+            Kokkos::abort( "Wrong typeJ in operator with FirstTestTag" );
+
+        return true;
+    }
+
+    KOKKOS_INLINE_FUNCTION bool operator()( FirstTestTag,
+                                            CabanaPD::MultiMaterial,
+                                            const int typeI, const int typeJ,
+                                            const int inputValue ) const
+    {
+        return this->operator()( FirstTestTag(), typeI, typeJ, inputValue );
+    }
+};
+} // namespace
+
+TEST( TEST_CATEGORY, test_forceModelsMulti_binary )
+{
+    int parameter[3] = { 1, 2, 3 };
+    TestModel<TestModelType<BaseModelDummyOne>, CabanaPD::Elastic,
+              CabanaPD::NoFracture, CabanaPD::TemperatureIndependent>
+        model1{ 0, 0, parameter[0] };
+    TestModel<TestModelType<BaseModelDummyOne>, CabanaPD::Elastic,
+              CabanaPD::NoFracture, CabanaPD::TemperatureDependent>
+        model2{ 1, 1, parameter[1] };
+    TestModel<TestModelType<BaseModelDummyTwo>, CabanaPD::Elastic,
+              CabanaPD::Fracture, CabanaPD::TemperatureIndependent>
+        model12{ 0, 1, parameter[2] };
+
+    CabanaPD::ForceModels models(
+        TestModelType<BaseModelDummyOne>{}, CabanaPD::DiagonalIndexing<2>{},
+        Cabana::makeParameterPack( model1, model2, model12 ) );
+
+    static_assert( std::is_same_v<CabanaPD::Elastic,
+                                  typename decltype( models )::model_type> );
+    static_assert( std::is_same_v<CabanaPD::Elastic,
+                                  typename decltype( models )::base_model> );
+    static_assert( std::is_same_v<CabanaPD::Fracture,
+                                  typename decltype( models )::fracture_type> );
+    static_assert( std::is_same_v<CabanaPD::TemperatureDependent,
+                                  typename decltype( models )::thermal_type> );
+
+    models( FirstTestTag{}, CabanaPD::SingleMaterial{}, 0, 0, parameter[0] );
+    models( FirstTestTag{}, CabanaPD::SingleMaterial{}, 1, 1, parameter[1] );
+    models( FirstTestTag{}, CabanaPD::SingleMaterial{}, 0, 1, parameter[2] );
+}
+
 } // end namespace Test
