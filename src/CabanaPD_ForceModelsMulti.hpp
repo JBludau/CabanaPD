@@ -194,6 +194,7 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
                          typename ParameterPackType::template value_type<
                              0>::base_model>...>),
         "All models need the same base model" );
+    // TODO this is a limitation of the solver we should get rid of
     using base_model =
         typename ParameterPackType::template value_type<0>::base_model;
 
@@ -203,6 +204,9 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
     using thermal_type = typename CheckTemperatureDependence<
         ParameterPackType,
         std::make_index_sequence<ParameterPackType::size>>::type;
+
+    // TODO right now this basically means that base_model and model_type are
+    // the same
     using model_type = typename FirstModelWithFractureType<
         fracture_type, ParameterPackType>::type::base_model;
 
