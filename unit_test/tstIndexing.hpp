@@ -83,12 +83,14 @@ TEST( TEST_CATEGORY, test_diagonalIndexing_death )
         {
             CabanaPD::DiagonalIndexing<2> indexing;
             auto i = indexing( 2, 0 );
+            (void)i;
         },
         "Index out of range of DiagonalIndexing" );
     ASSERT_DEATH(
         {
             CabanaPD::DiagonalIndexing<2> indexing;
             auto i = indexing( 0, 2 );
+            (void)i;
         },
         "Index out of range of DiagonalIndexing" );
 }
