@@ -247,7 +247,7 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
         auto t = getIndex( i, j );
         // Call individual model.
         // if inside the pack
-        if ( t < ParameterPackType::size)
+        if ( static_cast<unsigned>( t ) < ParameterPackType::size )
             return run_functor_for_index_in_pack_with_args(
                 IdentityFunctor{}, t, models, tag, i, j, args... );
         else
@@ -274,7 +274,7 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
 
         auto t = getIndex( i, j );
         // Call individual model.
-        if ( t < ParameterPackType::size )
+        if ( static_cast<unsigned>( t ) < ParameterPackType::size )
             return run_functor_for_index_in_pack_with_args(
                 IdentityFunctor{}, t, models, tag, mtag, type_i, type_j,
                 args... );
