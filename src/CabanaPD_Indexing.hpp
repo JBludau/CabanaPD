@@ -14,6 +14,23 @@
 
 namespace CabanaPD
 {
+
+template <unsigned FIRST, unsigned SECOND>
+struct IndexPair
+{
+    static const unsigned first = FIRST;
+    static const unsigned second = SECOND;
+};
+
+template <unsigned N, unsigned Index, unsigned Diagonal = 0>
+constexpr auto getDiagonalIndexPair()
+{
+    if constexpr ( Index < N )
+        return IndexPair<Index, Index + Diagonal>{};
+    else
+        return getDiagonalIndexPair<N, Index - N, Diagonal + 1>();
+}
+
 template <unsigned NumBaseModels>
 struct DiagonalIndexing
 {
@@ -37,6 +54,17 @@ struct DiagonalIndexing
             firstType < secondType ? firstType : secondType;
 
         return offset + indexAlongDiagonal;
+    }
+
+    static constexpr unsigned NumTotalModels =
+        ( NumBaseModels * NumBaseModels + NumBaseModels ) / 2;
+
+    template <unsigned Index>
+    static constexpr auto getInverseIndexPair()
+    {
+        static_assert( Index < NumTotalModels,
+                       "Requested inverse index out of range" );
+        return getDiagonalIndexPair<NumBaseModels, Index>();
     }
 };
 } // namespace CabanaPD
