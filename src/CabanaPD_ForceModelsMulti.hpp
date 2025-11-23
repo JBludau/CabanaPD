@@ -382,13 +382,13 @@ auto createMultiForceModel( ParticleType particles, IndexingType indexing,
     return ForceModels( type, indexing, Cabana::makeParameterPack( m... ) );
 }
 
-template <typename ParticleType, typename... ModelTypes>
+template <typename ParticleType, typename IndexingType, typename... ModelTypes,
+          std::enable_if_t<CabanaPD::is_Indexing<IndexingType>, int> = 0>
 auto createMultiForceModel( ParticleType particles, AverageTag,
-                            ModelTypes... m )
+                            IndexingType const& indexing, ModelTypes... m )
 {
-    using IndexingType = DiagonalIndexing<sizeof...( ModelTypes )>;
-    IndexingType indexing; // needs to support NumTotalModels and
-                           // getInverseIndexPair as constexpr.
+    // IndexingType needs to support NumTotalModels and
+    // getInverseIndexPair as constexpr.
     auto type = particles.sliceType();
     auto baseModels = Cabana::makeParameterPack( m... );
 
@@ -397,8 +397,17 @@ auto createMultiForceModel( ParticleType particles, AverageTag,
         CabanaPD::Impl::generateAllModelCombinationsForDiagonalIndexing(
             baseModels, indexing,
             std::make_index_sequence<sizeof...( ModelTypes )>{},
-            std::make_index_sequence<IndexingType::NumTotalModels -
+            std::make_index_sequence<indexing.NumTotalModels -
                                      sizeof...( ModelTypes )>{} ) );
+}
+
+template <typename ParticleType, typename... ModelTypes>
+auto createMultiForceModel( ParticleType particles, AverageTag,
+                            ModelTypes... m )
+{
+    using IndexingType = DiagonalIndexing<sizeof...( ModelTypes )>;
+    IndexingType indexing;
+    return createMultiForceModel( particles, AverageTag{}, indexing, m... );
 }
 
 } // namespace CabanaPD
