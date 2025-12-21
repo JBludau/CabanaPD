@@ -308,6 +308,34 @@ struct ForceModelsImpl<MaterialType, Indexing, ParameterPackType,
                 tag, i, j, args... );
     }
 
+    template <typename... Args>
+    KOKKOS_INLINE_FUNCTION auto
+    microconductivity_function( const int i, const int j, Args... args ) const
+    {
+        auto t = getIndex( i, j );
+
+        // Call individual model.
+        if ( static_cast<unsigned>( t ) < ParameterPackType::size )
+            return run_functor_for_index_in_pack_with_args(
+                MicroconductivityFunctor{}, t, models, args... );
+        else // TODO
+            Kokkos::abort( "MultiMaterial with a microconductivity outside of "
+                           "the indexing range is not implemented yet" );
+    }
+
+    KOKKOS_INLINE_FUNCTION auto specific_heat_capacity( const int i ) const
+    {
+        auto t = type( i );
+
+        // Call individual model.
+        if ( static_cast<unsigned>( t ) < ParameterPackType::size )
+            return run_functor_for_index_in_pack_with_args(
+                SpecificHeatCapacityFunctor{}, t, models );
+        else // TODO
+            Kokkos::abort( "MultiMaterial with a microconductivity outside of "
+                           "the indexing range is not implemented yet" );
+    }
+
     template <typename ParticleType>
     void update( const ParticleType& particles )
     {
