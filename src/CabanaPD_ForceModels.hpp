@@ -231,8 +231,7 @@ struct FractureModel<CriticalStretch>
 };
 
 FractureModel( const double _force_horizon, const double _K, const double _G0,
-               const int influence = 1 )
-    ->FractureModel<CriticalStretch>;
+               const int influence = 1 ) -> FractureModel<CriticalStretch>;
 
 /******************************************************************************
   Temperature-dependent models.
