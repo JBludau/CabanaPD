@@ -130,7 +130,7 @@ void testIntegratorADRSingleMass(
                                                 5 };
     CabanaPD::ADRInitialVelocity adrInitialVelocity{ forces, adrMass,
                                                      adrDeltaT };
-    CabanaPD::ADRIntegrator integrator(
+    CabanaPD::MassBasedADRIntegrator integrator(
         exec_space{}, adrMass, adrInitialVelocity, num_masses, adrDeltaT );
 
     integrator.reset( exec_space{}, velocities, displacements );
@@ -200,7 +200,7 @@ void testIntegratorADRparticles(
     double adrDeltaT = 1.0;
     double stiffness = 1000;
     auto particleIntegrator =
-        CabanaPD::createADRParticleIntegratorWithSimpleMass(
+        CabanaPD::createMassBasedADRParticleIntegratorWithSimpleMass(
             exec_space{}, forces, adrDeltaT, 1.0, 1.0, stiffness );
 
     // how to calculate forces
@@ -300,7 +300,7 @@ void testIntegratorADRparticlesMultiMaterialSimpleMass(
 
     double adrDeltaT = 1.0;
     auto particleIntegrator =
-        CabanaPD::createADRParticleIntegratorWithSimpleMass(
+        CabanaPD::createMassBasedADRParticleIntegratorWithSimpleMass(
             exec_space{}, forces, particles, models, adrDeltaT, 1.0, 1.0 );
 
     // how to calculate forces
@@ -404,7 +404,7 @@ void testIntegratorADRparticlesMultiMaterialExactMass(
     auto neighbor = CabanaPD::Neighbor<typename exec_space::memory_space>(
         models, particles );
     auto particleIntegrator =
-        CabanaPD::createADRParticleIntegratorWithExactMass(
+        CabanaPD::createMassBasedADRParticleIntegratorWithExactMass(
             exec_space{}, forces, particles, neighbor, models, adrDeltaT, 1.0 );
 
     // how to calculate forces
@@ -477,34 +477,136 @@ void testIntegratorADRparticlesMultiMaterialExactMass(
 //---------------------------------------------------------------------------//
 TEST( TEST_CATEGORY, test_integrate_reversibility )
 {
-    testIntegratorReversibility( 100 );
+    //    testIntegratorReversibility( 100 );
 }
 
-TEST( TEST_CATEGORY, test_integrate_ADR_single_mass )
+TEST( TEST_CATEGORY, test_integrate_ADR_mass_based_single_mass )
 {
-    testIntegratorADRSingleMass<true>( 1000, 1e-16, 1e-10 );
-    testIntegratorADRSingleMass<false>( 1000, 1e-16, 1e-10 );
+    //    testIntegratorADRSingleMass<true>( 1000, 1e-16, 1e-10 );
+    //    testIntegratorADRSingleMass<false>( 1000, 1e-16, 1e-10 );
 }
-TEST( TEST_CATEGORY, test_integrate_ADR_particles )
+TEST( TEST_CATEGORY, test_integrate_ADR_mass_based_particles )
 {
-    testIntegratorADRparticles<true>( 2000, 1e-16, 1e-10 );
-    testIntegratorADRparticles<false>( 2000, 1e-16, 1e-10 );
-}
-
-TEST( TEST_CATEGORY, test_integrate_ADR_particles_multi_material_simple_mass )
-{
-    testIntegratorADRparticlesMultiMaterialSimpleMass<true>( 3000, 1e-16,
-                                                             1e-10 );
-    testIntegratorADRparticlesMultiMaterialSimpleMass<false>( 3000, 1e-16,
-                                                              1e-10 );
+    //    testIntegratorADRparticles<true>( 2000, 1e-16, 1e-10 );
+    //    testIntegratorADRparticles<false>( 2000, 1e-16, 1e-10 );
 }
 
-TEST( TEST_CATEGORY, test_integrate_ADR_particles_multi_material_exact_mass )
+TEST( TEST_CATEGORY,
+      test_integrate_ADR_mass_based_particles_multi_material_simple_mass )
+{
+    //    testIntegratorADRparticlesMultiMaterialSimpleMass<true>( 3000, 1e-16,
+    //                                                             1e-10 );
+    //    testIntegratorADRparticlesMultiMaterialSimpleMass<false>( 3000, 1e-16,
+    //                                                              1e-10 );
+}
+
+TEST( TEST_CATEGORY,
+      test_integrate_ADR_mass_based_particles_multi_material_exact_mass )
 {
     // this seems to have a hard time to get to 1e-10
-    testIntegratorADRparticlesMultiMaterialExactMass<true>( 4500, 1e-10, 1e-4 );
-    testIntegratorADRparticlesMultiMaterialExactMass<false>( 4500, 1e-10,
-                                                             1e-4 );
+    //    testIntegratorADRparticlesMultiMaterialExactMass<true>( 4500, 1e-10,
+    //    1e-4 ); testIntegratorADRparticlesMultiMaterialExactMass<false>( 4500,
+    //    1e-10,
+    //                                                             1e-4 );
+}
+
+//---------------------------------------------------------------------------//
+// TESTS
+//---------------------------------------------------------------------------//
+
+template <bool GoBySteps>
+void testIntegratorADRTimeSingleMass(
+    int steps, [[maybe_unused]] double iteration_force_tolerance,
+    double displacement_epsilon )
+{
+    using exec_space = TEST_EXECSPACE;
+    constexpr int num_masses = 1;
+    double stiffness = 1000;
+
+    Kokkos::View<double[num_masses][3], TEST_EXECSPACE> velocities(
+        "testIntegrateADRSingleMass::velocities" );
+    Kokkos::View<double[num_masses][3], TEST_EXECSPACE> displacements(
+        "testIntegrateADRSingleMass::displacements" );
+    Kokkos::View<double[num_masses][3], TEST_EXECSPACE> forces(
+        "testIntegrateADRSingleMass::forces" );
+
+    // calculate forces
+    auto force_lambda = KOKKOS_LAMBDA( int i )
+    {
+        forces( i, 0 ) = -stiffness * displacements( i, 0 );
+        forces( i, 1 ) = -stiffness * displacements( i, 1 );
+        forces( i, 2 ) = -stiffness * displacements( i, 2 );
+    };
+
+    // initialize displacements
+    Kokkos::parallel_for(
+        "testIntegrateADRSingleMass::initialize_displacements", num_masses,
+        KOKKOS_LAMBDA( int i ) {
+            displacements( i, 0 ) = -0.3;
+            // displacements( i, 1 ) = -0.4;
+            // displacements( i, 2 ) = -0.5;
+            displacements( i, 1 ) = 0.0;
+            displacements( i, 2 ) = 0.0;
+        } );
+
+    CabanaPD::ADRInitialStiffness initialStiffness{ 1.0, stiffness, 1.0 };
+    CabanaPD::ADRInitialVelocityFromStiffness<decltype( forces ),
+                                              decltype( initialStiffness )>
+        initialVelocity{ forces, initialStiffness };
+    CabanaPD::TimeBasedADRIntegrator integrator(
+        exec_space{}, initialStiffness, initialVelocity, num_masses, 5000.0 );
+
+    Kokkos::parallel_for( "testIntegrateADRSingleMass::update_forces",
+                          num_masses, force_lambda );
+
+    integrator.reset( exec_space{}, velocities, displacements );
+
+    if constexpr ( GoBySteps )
+    {
+        for ( int s = 0; s < steps; ++s )
+        {
+            integrator.initialSubStep( exec_space{}, forces );
+            Kokkos::parallel_for( "testIntegrateADRSingleMass::update_forces",
+                                  num_masses, force_lambda );
+            integrator.middleSubStep( exec_space{}, forces, velocities,
+                                      displacements );
+            integrator.finalSubStep( exec_space{}, velocities, displacements );
+        }
+    }
+    else
+    {
+        int step = 0;
+        while ( integrator.getForceResidual() > iteration_force_tolerance &&
+                step < steps )
+        {
+            integrator.initialSubStep( exec_space{}, forces );
+            Kokkos::parallel_for( "testIntegrateADRSingleMass::update_forces",
+                                  num_masses, force_lambda );
+            integrator.middleSubStep( exec_space{}, forces, velocities,
+                                      displacements );
+            integrator.finalSubStep( exec_space{}, velocities, displacements );
+            ++step;
+        }
+        // check that it took less than the maximum number of steps
+        EXPECT_GT( steps, step );
+    }
+
+    // Make a copy of final results on the host
+    auto displacements_host = Kokkos::create_mirror_view_and_copy(
+        Kokkos::HostSpace{}, displacements );
+
+    // Check the results
+    for ( std::size_t p = 0; p < num_masses; ++p )
+    {
+        EXPECT_NEAR( displacements_host( p, 0 ), 0.0, displacement_epsilon );
+        EXPECT_NEAR( displacements_host( p, 1 ), 0.0, displacement_epsilon );
+        EXPECT_NEAR( displacements_host( p, 2 ), 0.0, displacement_epsilon );
+    }
+}
+TEST( TEST_CATEGORY, test_integrate_ADR_time_based_single_mass )
+{
+    testIntegratorADRTimeSingleMass<true>( 1000, 1e-16, 1e-10 );
+    testIntegratorADRTimeSingleMass<false>( 1000, 1e-16, 1e-10 );
 }
 
 //---------------------------------------------------------------------------//

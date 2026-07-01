@@ -198,6 +198,211 @@ class VelocityVerlet<Contact> : public VelocityVerlet<NoContact>
     using base_type::_timer;
 };
 
+template <typename ExecutionSpace, typename InitialStiffnessType,
+          typename InitialVelocityType, int SpatialDimension = 3>
+struct TimeBasedADRIntegrator
+{
+    static constexpr int dim = SpatialDimension;
+    using force_storage_base_type = double[dim];
+    using velocity_storage_base_type = double[dim];
+
+    Kokkos::View<force_storage_base_type*, ExecutionSpace> _forces_last_step;
+    Kokkos::View<velocity_storage_base_type*, ExecutionSpace>
+        _velocities_last_step;
+    InitialStiffnessType _initial_stiffness;
+    InitialVelocityType _initial_velocity;
+    double _inv_safety_factor;
+    double _l2_force_residual = Kokkos::Experimental::finite_max_v<double>;
+    double _l2_displacement_residual =
+        Kokkos::Experimental::finite_max_v<double>;
+    TimeBasedADRIntegrator( ExecutionSpace const& exec_space,
+                            InitialStiffnessType const& initial_stiffness,
+                            InitialVelocityType const& initial_velocity,
+                            size_t num_masses, double safety_factor = 5.0 )
+        : _forces_last_step(
+              Kokkos::View<force_storage_base_type*, ExecutionSpace>(
+                  Kokkos::view_alloc( exec_space, Kokkos::WithoutInitializing,
+                                      "Forces_Last_Step" ),
+                  num_masses ) )
+        , _velocities_last_step(
+              Kokkos::View<velocity_storage_base_type*, ExecutionSpace>(
+                  Kokkos::view_alloc( exec_space, Kokkos::WithoutInitializing,
+                                      "Velocities_Last_Step" ),
+                  num_masses ) )
+        , _initial_stiffness( initial_stiffness )
+        , _initial_velocity( initial_velocity )
+        , _inv_safety_factor( 1.0 / safety_factor )
+    {
+    }
+
+    template <typename VelocityType, typename DisplacementType>
+    void reset( ExecutionSpace, VelocityType const& velocity,
+                DisplacementType const& displacement ) const
+    {
+        Kokkos::parallel_for(
+            "TimeBasedADRIntegrator::reset",
+            Kokkos::RangePolicy<ExecutionSpace>(
+                0, _velocities_last_step.extent( 0 ) ),
+            KOKKOS_CLASS_LAMBDA( int64_t index ) {
+                for ( int i = 0; i < dim; ++i )
+                {
+                    velocity( index, i ) = _initial_velocity( index, i );
+                    auto delta_t =
+                        Kokkos::sqrt( _inv_safety_factor * 4.0 /
+                                      _initial_stiffness( index, i ) );
+                    displacement( index, i ) += delta_t * velocity( index, i );
+                    _velocities_last_step( index, i ) = velocity( index, i );
+                }
+            } );
+        Kokkos::fence( "TimeBasedADRIntegrator::Fence::reset" );
+    }
+
+    template <typename ForceType>
+    void initialSubStep( ExecutionSpace, ForceType const& forces ) const
+    {
+        Kokkos::parallel_for(
+            "MassBasedADRIntegrator::initialStep",
+            Kokkos::RangePolicy<ExecutionSpace>(
+                0, _forces_last_step.extent( 0 ) ),
+            KOKKOS_CLASS_LAMBDA( int64_t index ) {
+                for ( int i = 0; i < dim; ++i )
+                    _forces_last_step( index, i ) = forces( index, i );
+            } );
+        Kokkos::fence( "MassBasedADRIntegrator::Fence::intialStep" );
+    }
+
+    template <typename ForceType, typename VelocityType,
+              typename DisplacementType>
+    void middleSubStep( ExecutionSpace, ForceType const& forces,
+                        VelocityType const& velocities,
+                        DisplacementType const& displacements )
+    {
+        Kokkos::parallel_reduce(
+            "MassBasedADRIntegrator::middleStep",
+            Kokkos::RangePolicy<ExecutionSpace>(
+                0, _forces_last_step.extent( 0 ) ),
+            KOKKOS_CLASS_LAMBDA( int64_t index, double& local_force_residual,
+                                 double& local_displacement_residual ) {
+                double delta_t[dim];
+                double damping_numerator = 0.;
+                double damping_denominator = 0.;
+
+                // compute delta_t
+                for ( int i = 0; i < dim; ++i )
+                {
+                    auto stiffness =
+                        Kokkos::abs( ( -forces( index, i ) +
+                                       _forces_last_step( index, i ) ) /
+                                     _velocities_last_step( index, i ) );
+                    if ( Kokkos::isnan( stiffness ) )
+                        delta_t[i] = 0.;
+                    else
+                        delta_t[i] = 4.0 * _inv_safety_factor / stiffness;
+                    // TODO set a physically motivated max timestep;
+                    delta_t[i] = Kokkos::min( delta_t[i], 10.0 );
+                }
+                // compute damping numerator
+                for ( int i = 0; i < dim; ++i )
+                {
+                    auto stiffness = Kokkos::abs(
+                        ( -forces( index, i ) +
+                          _forces_last_step( index, i ) ) /
+                        _velocities_last_step( index, i ) * delta_t[i] );
+                    if ( Kokkos::isnan( stiffness ) )
+                        stiffness = 0.;
+                    auto entry = stiffness * displacements( index, i );
+                    damping_numerator += displacements( index, i ) * entry;
+                }
+                // compute damping denominator
+                for ( int i = 0; i < dim; ++i )
+                {
+                    local_force_residual +=
+                        ( -forces( index, i ) +
+                          _forces_last_step( index, i ) ) *
+                        ( -forces( index, i ) + _forces_last_step( index, i ) );
+                    damping_denominator +=
+                        displacements( index, i ) * displacements( index, i );
+                }
+                double c_damping = 2.0 * Kokkos::sqrt( damping_numerator /
+                                                       damping_denominator );
+
+                // nan check since we divide by the displacement and the
+                // velocity. Thus we can have a lot of 0s which are
+                // singularities in the formula for c_damping
+                if ( Kokkos::isnan( c_damping ) )
+                    c_damping = 0.;
+                if ( c_damping >= 2.0 )
+                    c_damping = 1.9;
+
+                // update velocity with old velocity and damping coefficient
+                for ( int i = 0; i < dim; ++i )
+                {
+                    // update velocity
+                    velocities( index, i ) =
+                        ( ( 2.0 - c_damping * delta_t[i] ) *
+                              _velocities_last_step( index, i ) +
+                          2.0 * delta_t[i] * forces( index, i ) ) /
+                        ( 2.0 + c_damping * delta_t[i] );
+                    local_displacement_residual +=
+                        ( delta_t[i] * velocities( index, i ) ) *
+                        ( delta_t[i] * velocities( index, i ) );
+                    // update displacement with velocity
+                    displacements( index, i ) +=
+                        delta_t[i] * velocities( index, i );
+                }
+
+                for ( int i = 0; i < dim; ++i )
+                    std::cout << "delta_t " << delta_t[i] << " c_damp "
+                              << c_damping << " displacmeent "
+                              << displacements( index, i ) << " velocities "
+                              << velocities( index, i ) << " vel last step "
+                              << _velocities_last_step( index, i ) << " forces "
+                              << forces( index, i ) << std::endl;
+                std::cout << std::endl;
+                for ( int i = 0; i < dim; ++i )
+                    _velocities_last_step( index, i ) = velocities( index, i );
+            },
+            _l2_force_residual, _l2_displacement_residual );
+    }
+
+    template <typename VelocityType, typename DisplacementType>
+    void finalSubStep( ExecutionSpace, VelocityType, DisplacementType ) const
+    {
+    }
+
+    double getForceResidual() { return _l2_force_residual; }
+    double getDisplacementResidual() { return _l2_displacement_residual; }
+};
+
+struct ADRInitialStiffness
+{
+    double delta_x;
+    double c;
+    double horizon;
+
+    template <typename IndexType>
+    auto KOKKOS_FUNCTION operator()( IndexType, int ) const
+    {
+        return c * Kokkos::numbers::pi * horizon * horizon * horizon /
+               ( delta_x * 3.0 );
+    }
+};
+
+template <typename ForcesType, typename StiffnessType>
+struct ADRInitialVelocityFromStiffness
+{
+    ForcesType _forces;
+    StiffnessType _stiffness;
+
+    template <typename IndexType>
+    auto KOKKOS_FUNCTION operator()( IndexType index, int dim ) const
+    {
+        double cf = 500.0;
+        auto delta_t = Kokkos::sqrt( 4.0 / cf / _stiffness( index, dim ) );
+        return ( 0.5 * _forces( index, dim ) * delta_t );
+    }
+};
+
 //  S: Integrate d^2u/dt^2 = Force in time with Adaptive Dynamic Relaxation
 //  O: Can be extended by wrapping
 //  L: no inheritance
@@ -208,7 +413,7 @@ class VelocityVerlet<Contact> : public VelocityVerlet<NoContact>
 
 template <typename ExecutionSpace, typename FictitiousMassType,
           typename InitialVelocityType, int SpatialDimension = 3>
-struct ADRIntegrator
+struct MassBasedADRIntegrator
 {
     static constexpr int dim = SpatialDimension;
     using force_storage_base_type = double[dim];
@@ -218,17 +423,17 @@ struct ADRIntegrator
     Kokkos::View<velocity_storage_base_type*, ExecutionSpace>
         _velocities_last_step;
     FictitiousMassType _fictitious_mass;
-    InitialVelocityType _initial_velocity_type;
+    InitialVelocityType _initial_velocity;
     double _delta_t;
     double _l2_force_residual = Kokkos::Experimental::finite_max_v<double>;
     double _l2_displacement_residual =
         Kokkos::Experimental::finite_max_v<double>;
 
   public:
-    ADRIntegrator( ExecutionSpace const& exec_space,
-                   FictitiousMassType const& fictitious_mass,
-                   InitialVelocityType const& initial_velocity,
-                   size_t num_masses, double dt )
+    MassBasedADRIntegrator( ExecutionSpace const& exec_space,
+                            FictitiousMassType const& fictitious_mass,
+                            InitialVelocityType const& initial_velocity,
+                            size_t num_masses, double dt )
         : _forces_last_step(
               Kokkos::View<force_storage_base_type*, ExecutionSpace>(
                   Kokkos::view_alloc( exec_space, Kokkos::WithoutInitializing,
@@ -240,7 +445,7 @@ struct ADRIntegrator
                                       "Velocities_Last_Step" ),
                   num_masses ) )
         , _fictitious_mass( fictitious_mass )
-        , _initial_velocity_type( initial_velocity )
+        , _initial_velocity( initial_velocity )
         , _delta_t( dt )
     {
     }
@@ -250,32 +455,32 @@ struct ADRIntegrator
                 DisplacementType const& displacement ) const
     {
         Kokkos::parallel_for(
-            "ADRIntegrator::reset",
+            "MassBasedADRIntegrator::reset",
             Kokkos::RangePolicy<ExecutionSpace>(
                 0, _velocities_last_step.extent( 0 ) ),
             KOKKOS_CLASS_LAMBDA( int64_t index ) {
                 for ( int i = 0; i < dim; ++i )
                 {
-                    velocity( index, i ) = _initial_velocity_type( index, i );
+                    velocity( index, i ) = _initial_velocity( index, i );
                     displacement( index, i ) += _delta_t * velocity( index, i );
                     _velocities_last_step( index, i ) = velocity( index, i );
                 }
             } );
-        Kokkos::fence( "ADRIntegrator::Fence::reset" );
+        Kokkos::fence( "MassBasedADRIntegrator::Fence::reset" );
     }
 
     template <typename ForceType>
     void initialSubStep( ExecutionSpace, ForceType const& forces ) const
     {
         Kokkos::parallel_for(
-            "ADRIntegrator::initialStep",
+            "MassBasedADRIntegrator::initialStep",
             Kokkos::RangePolicy<ExecutionSpace>(
                 0, _forces_last_step.extent( 0 ) ),
             KOKKOS_CLASS_LAMBDA( int64_t index ) {
                 for ( int i = 0; i < dim; ++i )
                     _forces_last_step( index, i ) = forces( index, i );
             } );
-        Kokkos::fence( "ADRIntegrator::Fence::intialStep" );
+        Kokkos::fence( "MassBasedADRIntegrator::Fence::intialStep" );
     }
 
     template <typename ForceType, typename VelocityType,
@@ -285,7 +490,7 @@ struct ADRIntegrator
                         DisplacementType const& displacements )
     {
         Kokkos::parallel_reduce(
-            "ADRIntegrator::middleStep",
+            "MassBasedADRIntegrator::middleStep",
             Kokkos::RangePolicy<ExecutionSpace>(
                 0, _forces_last_step.extent( 0 ) ),
             KOKKOS_CLASS_LAMBDA( int64_t index, double& local_force_residual,
@@ -348,20 +553,20 @@ struct ADRIntegrator
                        DisplacementType const& displacements ) const
     {
         Kokkos::parallel_for(
-            "ADRIntegrator::finalStep",
+            "MassBasedADRIntegrator::finalStep",
             Kokkos::RangePolicy<ExecutionSpace>(
                 0, _forces_last_step.extent( 0 ) ),
             KOKKOS_CLASS_LAMBDA( int64_t index ) {
                 for ( int i = 0; i < dim; ++i )
                 {
-                    // update displacement with velocity
+                    // update displacement with vely5yocity
                     displacements( index, i ) +=
                         _delta_t * velocities( index, i );
 
                     _velocities_last_step( index, i ) = velocities( index, i );
                 }
             } );
-        Kokkos::fence( "ADRIntegrator::Fence::finalStep" );
+        Kokkos::fence( "MassBasedADRIntegrator::Fence::finalStep" );
     }
 
     double getForceResidual() { return _l2_force_residual; }
@@ -631,22 +836,22 @@ struct ParticleIntegratorWrapper
 };
 
 template <typename ExecutionSpace, typename ForceType>
-auto createADRParticleIntegratorWithSimpleMass(
+auto createMassBasedADRParticleIntegratorWithSimpleMass(
     ExecutionSpace const& exec_space, ForceType const& forces, double delta_t,
     double horizon, double delta_x, double c, double safety_factor = 5.0 )
 {
     CabanaPD::ADRMassPMBSingleMaterial adrMass{ delta_t, horizon, delta_x, c,
                                                 safety_factor };
     CabanaPD::ADRInitialVelocity adrInitialVelocity{ forces, adrMass, delta_t };
-    CabanaPD::ADRIntegrator integrator( exec_space, adrMass, adrInitialVelocity,
-                                        forces.size(), delta_t );
+    CabanaPD::MassBasedADRIntegrator integrator(
+        exec_space, adrMass, adrInitialVelocity, forces.size(), delta_t );
     CabanaPD::ParticleIntegratorWrapper particleIntegrator( integrator );
     return particleIntegrator;
 }
 
 template <typename ExecutionSpace, typename ForceType, typename ParticleType,
           typename ForceModelsType>
-auto createADRParticleIntegratorWithSimpleMass(
+auto createMassBasedADRParticleIntegratorWithSimpleMass(
     ExecutionSpace const& exec_space, ForceType const& forces,
     ParticleType const& particles, ForceModelsType const& force_models,
     double delta_t, double horizon, double delta_x, double safety_factor = 5.0 )
@@ -659,15 +864,15 @@ auto createADRParticleIntegratorWithSimpleMass(
             particleType, force_models.indexing, force_models, delta_t, horizon,
             delta_x,      safety_factor };
     CabanaPD::ADRInitialVelocity adrInitialVelocity{ forces, adrMass, delta_t };
-    CabanaPD::ADRIntegrator integrator( exec_space, adrMass, adrInitialVelocity,
-                                        forces.size(), delta_t );
+    CabanaPD::MassBasedADRIntegrator integrator(
+        exec_space, adrMass, adrInitialVelocity, forces.size(), delta_t );
     CabanaPD::ParticleIntegratorWrapper particleIntegrator( integrator );
     return particleIntegrator;
 }
 
 template <typename ExecutionSpace, typename ForceType, typename ParticleType,
           typename NeighborType, typename ForceModelsType>
-auto createADRParticleIntegratorWithExactMass(
+auto createMassBasedADRParticleIntegratorWithExactMass(
     ExecutionSpace const& exec_space, ForceType const& forces,
     ParticleType const& particles, NeighborType const& neighbors,
     ForceModelsType const& force_models, double delta_t, double delta_x,
@@ -679,8 +884,27 @@ auto createADRParticleIntegratorWithExactMass(
         adrMass{ exec_space,   particles, neighbors, force_models.indexing,
                  force_models, delta_t,   delta_x,   safety_factor };
     CabanaPD::ADRInitialVelocity adrInitialVelocity{ forces, adrMass, delta_t };
-    CabanaPD::ADRIntegrator integrator( exec_space, adrMass, adrInitialVelocity,
-                                        forces.size(), delta_t );
+    CabanaPD::MassBasedADRIntegrator integrator(
+        exec_space, adrMass, adrInitialVelocity, forces.size(), delta_t );
+    CabanaPD::ParticleIntegratorWrapper particleIntegrator( integrator );
+    return particleIntegrator;
+}
+
+template <typename ExecutionSpace, typename ParticleType>
+auto createTimeBasedADRParticleIntegrator( ExecutionSpace const& exec_space,
+                                           ParticleType const& particles,
+                                           double delta_x, double c,
+                                           double horizon,
+                                           double safety_factor = 5.0 )
+{
+    CabanaPD::ADRInitialStiffness initialStiffness{ delta_x, c, horizon };
+    auto forces = particles.sliceForce();
+    CabanaPD::ADRInitialVelocityFromStiffness<decltype( forces ),
+                                              decltype( initialStiffness )>
+        initialVelocity{ forces, initialStiffness };
+    CabanaPD::TimeBasedADRIntegrator integrator(
+        exec_space, initialStiffness, initialVelocity, particles.gridSize(),
+        safety_factor );
     CabanaPD::ParticleIntegratorWrapper particleIntegrator( integrator );
     return particleIntegrator;
 }
