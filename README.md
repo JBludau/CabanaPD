@@ -22,4 +22,4 @@ We encourage you to contribute to CabanaPD! Please check the
 ## Documentation
 
 See the CabanaPD user guide, theory guide, and API documentation
-[here](https://ornl.github.io/cabanapd).
+[here](https://ornl.github.io/CabanaPD).
