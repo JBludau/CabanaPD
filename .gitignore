@@ -9,3 +9,6 @@ build/
 *.xmf
 *.err
 *.in.json
+
+# Docs
+site/

@@ -1,0 +1,17 @@
+{
+    "num_cells"              : {"value": [100, 100, 100]},
+    "system_size"            : {"value": [0.0005, 0.0005, 0.0005], "unit": "m"},
+    "grain_size"             : {"value": 6.0e-5, "unit": "m"},
+    "horizon"                : {"value": 1.5e-5, "unit": "m"},
+    "speed"                  : {"value": 0.1, "unit": "m/s"},
+    "final_time"             : {"value": 1.0e-7, "unit": "s"},
+    "timestep"               : {"value": 1.0e-10, "unit": "s"},
+    "timestep_safety_factor" : {"value": 0.85},
+    "output_frequency"       : {"value": 10},
+    "output_reference"       : {"value": true},
+
+    "density"                : {"value": [2440], "unit": "kg/m^3"},
+    "elastic_modulus"        : {"value": [500e+9, 500e+9], "unit": "Pa"},
+    "Poisson's_ratio"        : {"value": [0.25, 0.25]},
+    "fracture_energy"        : {"value": [20.0, 0.0006], "unit": "J/m^2"}
+}
