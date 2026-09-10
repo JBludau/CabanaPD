@@ -49,7 +49,7 @@ nav = [
   { "Getting Started" = "getting_started.md" },
   { "Contributing" = "CONTRIBUTING.md"},
   { "Citing CabanaPD" = "citing.md"},
-  { "Theory Guide" = ["theory/peridynamics.md"] },
+  { "Theory Guide" = ["theory/peridynamics.md", "theory/time_integration.md"] },
   { "User Guide" = ["user/features.md", "user/examples.md", "user/tests.md"] },
   { "API reference" = [
      "API/input_files.md"

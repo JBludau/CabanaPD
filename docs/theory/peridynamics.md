@@ -6,16 +6,19 @@ icon: lucide/sigma
 
 CabanaPD uses the peridynamic formulation[^1] [^2]. Given a bounded body $\mathcal{B}\subset \mathbb{R}^3$, the equation of motion for a material point ${\bf x} \in \mathcal{B}$ at time $t\geqslant 0$ is:
 
-$$
+\begin{equation}
+\label{eq:EquationOfMotion}
 \rho
 \frac{\partial^2 {\bf u}}{\partial t^2}({\bf x},t)
-= \int_{\mathcal{H}_{\bf x}} {\bf f}({\bf x}^\prime, {\bf x},t) dV_{\bf x^\prime} + {\bf b}({\bf x},t),
-$$
+= \int_{\mathcal{H}_{ \bf x}} { \bf f}({ \bf x}^\prime, { \bf x},t) dV_{ \bf x^\prime} + { \bf b}({\bf x},t),
+\end{equation}
 
 where $\mathbf{x}$ denotes the position in the reference configuration, $\rho$ is the mass density, ${\bf u}$ is the displacement field, ${\bf f}$ is the bond force function, ${\bf b}$ is a prescribed body force density, and $\mathcal{H}_{\bf x}$ is the nonlocal neighborhood of ${\bf x}$ defined by
+
 $$
 \mathcal{H}_{\bf x}:=\lbrace {\bf x}^\prime \in \mathcal{B}: \lVert{\bf x}^\prime -{\bf x}\rVert\leqslant \delta \rbrace,
 $$
+
 where $\|\cdot\|$ denotes the Euclidean norm, $\delta>0$ is the maximum distance over which nonlocal interactions occur (called the horizon), and ${\bf x}^\prime\in\mathcal{H}_{\bf{x}}$ denotes a neighboring material point.
 
 ## References

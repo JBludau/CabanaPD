@@ -1,9 +1,25 @@
-// Ensure MathJax re-runs on Zensical's instant navigation events
-document$.subscribe(() => {
-  if (typeof MathJax !== 'undefined') {
-    MathJax.startup.output.clearCache()
-    MathJax.typesetClear()
-    MathJax.texReset()
-    MathJax.typesetPromise()
+window.MathJax = {
+  tex: {
+    tags: 'ams',
+    inlineMath: [["\\(", "\\)"]],
+    displayMath: [["\\[", "\\]"]],
+    processEscapes: true,
+    processEnvironments: true
+  },
+  options: {
+    ignoreHtmlClass: ".*|",
+    processHtmlClass: "arithmatex"
   }
+};
+
+document$.subscribe(() => {
+  MathJax.startup.output.clearCache()
+  MathJax.typesetClear()
+  MathJax.texReset()
+  MathJax.typesetPromise()
+})
+
+component$.subscribe(({ ref }) => {
+  if (ref.classList.contains("md-annotation"))
+    MathJax.typesetPromise([ref])
 })

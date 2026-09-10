@@ -36,6 +36,11 @@ Examples which only include mechanics and fracture are within `examples/mechanic
     ./CabanaPD/build/install/bin/DogboneTensileTest CabanaPD/examples/mechanics/inputs/dogbone_tensile_test.json
     ```
 
+ -  An example highlighting plasticity simulates a tensile test based on an ASTM standard dogbone specimen. This version uses the ADR integration for most of the simulation time and switches to verlet integration right before failure.
+    ```
+    ./CabanaPD/build/install/bin/DogboneTensileTestADR CabanaPD/examples/mechanics/inputs/dogbone_tensile_test.json
+    ```
+
  -  An example demonstrating the peridynamic stress tensor computation simulates a square plate under tension with a circular hole at its center[^5].
     ```
     ./CabanaPD/build/install/bin/PlateWithHole CabanaPD/examples/mechanics/inputs/plate_with_hole.json
