@@ -157,7 +157,8 @@ void test_cube_linear_temperature_single( ModelType )
 
     // Primary check on the particle temperature that results from the
     // linear temperature profile in main direction, which is x
-    for ( size_t pid = 0; pid < particles.size(); pid++ )
+    for ( size_t pid = particles.frozenOffset(); pid < particles.localOffset();
+          pid++ )
     {
         if ( center_cube.inside( x_host, pid ) )
         {
@@ -173,7 +174,8 @@ void test_cube_linear_temperature_single( ModelType )
 
     // Secondary check on the particle displacement. It should be 0 as the
     // thermal expansion is 0.
-    for ( size_t pid = 0; pid < particles.size(); pid++ )
+    for ( size_t pid = particles.frozenOffset(); pid < particles.localOffset();
+          pid++ )
     {
         if ( center_cube.inside( x_host, pid ) )
         {
