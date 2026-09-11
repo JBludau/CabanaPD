@@ -141,7 +141,7 @@ void test_cube_linear_temperature_single( ModelType )
     using HostAoSoA =
         Cabana::AoSoA<Cabana::MemberTypes<double[3], double[3], double>,
                       Kokkos::HostSpace>;
-    HostAoSoA aosoa_host( "host_aosoa", particles.localOffset() );
+    HostAoSoA aosoa_host( "host_aosoa", x.size() );
     auto u_host = Cabana::slice<0>( aosoa_host );
     auto x_host = Cabana::slice<1>( aosoa_host );
     auto temp_host = Cabana::slice<2>( aosoa_host );
@@ -157,7 +157,7 @@ void test_cube_linear_temperature_single( ModelType )
 
     // Primary check on the particle temperature that results from the
     // linear temperature profile in main direction, which is x
-    for ( size_t pid = 0; pid < particles.localOffset(); pid++ )
+    for ( size_t pid = 0; pid < x.size(); pid++ )
     {
         if ( center_cube.inside( x_host, pid ) )
         {
@@ -173,7 +173,7 @@ void test_cube_linear_temperature_single( ModelType )
 
     // Secondary check on the particle displacement. It should be 0 as the
     // thermal expansion is 0.
-    for ( size_t pid = 0; pid < particles.localOffset(); pid++ )
+    for ( size_t pid = 0; pid < x.size(); pid++ )
     {
         if ( center_cube.inside( x_host, pid ) )
         {
