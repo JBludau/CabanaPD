@@ -29,4 +29,3 @@ add_executable(Polycrystal polycrystal.cpp)
 target_link_libraries(Polycrystal LINK_PUBLIC CabanaPD)
 
 install(TARGETS ElasticWave KalthoffWinkler CrackBranching FragmentingCylinder RandomCracks DogboneTensileTest DogboneTensileTestADR PlateWithHole CrackInclusion Polycrystal DESTINATION ${CMAKE_INSTALL_BINDIR})
-
